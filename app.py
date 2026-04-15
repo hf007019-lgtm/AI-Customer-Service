@@ -106,7 +106,7 @@ st.set_page_config(page_title="AI 智能体店长", page_icon="🛒", layout="ce
 st.title("🛒 拥有行动力的 AI 店长")
 
 # ⚠️ 这里填入你的 API Key
-ALIYUN_API_KEY = "sk-7e8c34117bf94c02af0edde27837b553"
+ALIYUN_API_KEY = st.secrets["ALIYUN_API_KEY"]
 
 if "messages" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4()) # 给顾客发身份证
