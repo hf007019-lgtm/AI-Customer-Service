@@ -1,0 +1,13 @@
+# 忽略环境变量（最重要）
+../.env
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 数据库
+*.db
+
+# 系统文件
+.DS_Store
+Thumbs.db

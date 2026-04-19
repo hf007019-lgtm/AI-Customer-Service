@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 智能导购空间</title>
+  <style>
+    /* 1. 基础重置与高端排版 */
+    :root {
+      --primary-color: #000000;
+      --bg-color: #f5f5f7;
+      --chat-bg: #ffffff;
+      --user-msg-bg: #007aff;
+      --bot-msg-bg: #f2f2f7;
+      --text-main: #1d1d1f;
+      --text-muted: #86868b;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 800px;
+      background: var(--chat-bg);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.04);
+      position: relative;
+    }
+
+    .header {
+      padding: 20px;
+      text-align: center;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      background: rgba(255,255,255,0.8);
+      backdrop-filter: blur(10px);
+      z-index: 10;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .header p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px 100px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .msg-wrapper {
+      display: flex;
+      flex-direction: column;
+      max-width: 75%;
+      animation: fadeIn 0.3s ease forwards;
+    }
+
+    .msg-wrapper.user { align-self: flex-end; }
+    .msg-wrapper.bot { align-self: flex-start; }
+
+    .msg {
+      padding: 14px 18px;
+      border-radius: 20px;
+      font-size: 15px;
+      line-height: 1.6;
+      word-wrap: break-word;
+    }
+
+    .user .msg {
+      background: var(--user-msg-bg);
+      color: white;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
+    }
+
+    .bot .msg {
+      background: var(--bot-msg-bg);
+      color: var(--text-main);
+      border-bottom-left-radius: 4px;
+    }
+
+    .avatar-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      margin-left: 4px;
+    }
+    .user .avatar-label {
+      text-align: right;
+      margin-right: 4px;
+    }
+
+    .input-container {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+      background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 30%, rgba(255,255,255,1) 100%);
+    }
+
+    .input-box {
+      display: flex;
+      background: white;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 30px;
+      padding: 6px 6px 6px 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      transition: box-shadow 0.2s;
+      align-items: center;
+    }
+
+    .input-box:focus-within {
+      box-shadow: 0 4px 20px rgba(0, 122, 255, 0.15);
+      border-color: rgba(0, 122, 255, 0.3);
+    }
+
+    input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      background: transparent;
+    }
+
+    button {
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 24px;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+    button:hover { background: #333; }
+    button:active { transform: scale(0.95); }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .loading .msg {
+      font-style: italic;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="header">
+    <h1>✨ AI 智能店长</h1>
+    <p>您的专属全天候购物助手</p>
+  </div>
+
+  <div id="chat">
+    <div class="msg-wrapper bot">
+      <div class="avatar-label">智能导购</div>
+      <div class="msg">您好！我是您的专属 AI 导购。您可以打字告诉我需求，或者点击下方的 📷 发送图片给我。</div>
+    </div>
+  </div>
+
+  <div class="input-container">
+    <div id="imagePreview" style="display: none; margin-bottom: 10px; padding: 0 20px;">
+      <div style="position: relative; display: inline-block;">
+        <img id="previewImg" style="height: 60px; border-radius: 8px; border: 1px solid #ddd; object-fit: cover;">
+        <button onclick="clearImage()" style="position: absolute; top: -8px; right: -8px; background: red; color: white; border-radius: 50%; padding: 0; width: 20px; height: 20px; font-size: 10px; line-height: 20px; text-align: center;">X</button>
+      </div>
+    </div>
+
+    <div class="input-box">
+      <input type="file" id="imageUpload" accept="image/jpeg, image/png" style="display: none;">
+      <label for="imageUpload" style="cursor: pointer; font-size: 20px; padding: 0 10px 0 0; color: #888;">📷</label>
+
+      <input id="msg" placeholder="输入你想找的商品，或发图给我..." onkeydown="if(event.key==='Enter') send()">
+      <button onclick="send()">发送 ↗</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const chat = document.getElementById("chat");
+
+// 1. Session 初始化
+let sessionId = localStorage.getItem("ai_store_session_id");
+if (!sessionId) {
+  sessionId = "user_" + Math.random().toString(36).substring(2, 15);
+  localStorage.setItem("ai_store_session_id", sessionId);
+}
+
+// 2. 图片处理逻辑 (必须在全局)
+let currentBase64Image = null;
+
+document.getElementById('imageUpload').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    currentBase64Image = event.target.result;
+    document.getElementById('previewImg').src = currentBase64Image;
+    document.getElementById('imagePreview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+});
+
+function clearImage() {
+  currentBase64Image = null;
+  document.getElementById('imagePreview').style.display = 'none';
+  document.getElementById('imageUpload').value = '';
+}
+
+// 3. 渲染聊天气泡
+function addMessage(text, type, senderName) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg-wrapper " + type;
+
+  const label = document.createElement("div");
+  label.className = "avatar-label";
+  label.innerText = senderName;
+  wrapper.appendChild(label);
+
+  const msgDiv = document.createElement("div");
+  msgDiv.className = "msg";
+  // 兼容普通文本和后端发来的 HTML (如 <br>)
+  msgDiv.innerHTML = text;
+  wrapper.appendChild(msgDiv);
+
+  chat.appendChild(wrapper);
+  chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+  return msgDiv;
+}
+
+// 4. 发送逻辑
+async function send() {
+  const input = document.getElementById("msg");
+  const text = input.value.trim();
+
+  // 如果没写字也没发图，直接返回
+  if (!text && !currentBase64Image) return;
+
+  // 组装用户视角的发送提示
+  let displayUserText = text;
+  if (!text && currentBase64Image) displayUserText = "[发送了一张图片]";
+  if (text && currentBase64Image) displayUserText = text + " <br><span style='font-size:12px; color:#ddd;'>[附带图片]</span>";
+
+  addMessage(displayUserText, "user", "我");
+  input.value = "";
+
+  // 渲染 Loading
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg-wrapper bot loading";
+  const msgDiv = document.createElement("div");
+  msgDiv.className = "msg";
+  msgDiv.innerText = currentBase64Image ? "正在解析图像..." : "正在为您匹配数据...";
+  wrapper.appendChild(msgDiv);
+  chat.appendChild(wrapper);
+  chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+
+  // 暂存图片数据并立即清空预览 UI
+  const imageToSend = currentBase64Image;
+  clearImage();
+
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        message: text,
+        session_id: sessionId,
+        image: imageToSend // 🌟 包含图片数据发送给后端
+      })
+    });
+
+    const data = await res.json();
+    wrapper.classList.remove("loading");
+    // 使用 innerHTML 渲染后端返回的换行标签
+    msgDiv.innerHTML = data.reply;
+
+  } catch (err) {
+    wrapper.classList.remove("loading");
+    msgDiv.innerText = "❌ 网络连接失败，请确认后端服务已启动。";
+    msgDiv.style.color = "red";
+    console.error(err);
+  }
+}
+</script>
+
+</body>
+</html>
