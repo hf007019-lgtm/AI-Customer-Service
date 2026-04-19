@@ -1,7 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 import sqlite3
 
-# 1. 初始化你的第一个 MCP 服务器，给它起个帅气的名字
+# 1. 初始化你的第一个 MCP 服务器
 mcp = FastMCP("Shop-Database")
 
 

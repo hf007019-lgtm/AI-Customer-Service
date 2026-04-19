@@ -6,7 +6,6 @@ from mcp.client.stdio import stdio_client
 async def test_mcp_connection():
     print("🔄 正在尝试通过 MCP 协议连接数据库服务器...")
 
-    # 1. 告诉客户端，去哪里唤醒服务器 (就是去跑 python mcp_server.py)
     server_params = StdioServerParameters(
         command="python",
         args=["mcp_server.py"]
@@ -19,8 +18,6 @@ async def test_mcp_connection():
             await session.initialize()
             print("✅ 连接成功！正在向服务器发送 '查询库存' 的协议指令...\n")
 
-            # 3. 核心魔法：跨越文件和进程，调用服务器里的工具！
-            # 注意：这里调用的名字 "get_in_stock_products" 必须和服务器里的函数名一模一样
             result = await session.call_tool("get_in_stock_products", arguments={})
 
             # 打印服务器返回的结果

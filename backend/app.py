@@ -1,122 +1,107 @@
-import streamlit as st
-import base64
-import uuid
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
+import os
+from dotenv import load_dotenv
 import json
+import uuid
 
+# 导入你的业务层和数据层
 from database import init_db, fetch_products, save_chat
 from ai_agents import TOOLS, get_router_intent, call_department_agent, call_vision_agent
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
+app = Flask(__name__, template_folder='../frontend')
+CORS(app)  # 允许跨域请求
 
-ALIYUN_API_KEY = os.getenv("ALIYUN_API_KEY")
-
-# 初始化应用依赖
+# 初始化数据
 init_db()
-
-
-def render_checkout_card(product_name, price):
-    """渲染订单支付组件 UI"""
-    st.success("收银台已为您生成专属订单")
-    with st.container(border=True):
-        st.markdown(f"### 购买商品：{product_name}")
-        st.markdown(f"**应付金额：** <span style='color:red; font-size:24px'>¥{price}</span>", unsafe_allow_html=True)
-        st.text_input("收货地址", placeholder="请输入您的详细地址...")
-        st.button("立即微信支付", type="primary", use_container_width=True)
-
-
-# 基础页面配置
-st.set_page_config(page_title="AI Store", layout="centered")
-st.title("AI 智能导购系统")
-
-
-# Session State 初始化
-if "messages" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-    st.session_state.messages = []
-
-# 预加载商品上下文
 db_data = fetch_products()
 
-# ================= Sidebar: 视觉分析模块 =================
-with st.sidebar:
-    st.markdown("### 图像识别测试")
-    uploaded_image = st.file_uploader("上传参考图", type=["jpg", "jpeg", "png"])
-    if uploaded_image:
-        st.image(uploaded_image, caption="Uploaded", use_container_width=True)
-        base64_image = f"data:image/jpeg;base64,{base64.b64encode(uploaded_image.getvalue()).decode('utf-8')}"
-        if st.button("开始分析", type="primary"):
-            with st.spinner("处理中..."):
-                vision_result = call_vision_agent(base64_image, db_data, ALIYUN_API_KEY)
-                st.write(vision_result)
-                # 将视觉结果静默注入上下文
-                st.session_state.messages.append({"role": "assistant", "content": f"（图片解析结论）：{vision_result}"})
+load_dotenv()
+ALIYUN_API_KEY = os.getenv("ALIYUN_API_KEY")
 
-# ================= Main: 会话历史渲染 =================
-for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+if not ALIYUN_API_KEY:
+    print("⚠️ 警告：未检测到 ALIYUN_API_KEY，请检查 .env 文件！")
 
-# ================= Main: 核心交互逻辑 =================
-if prompt := st.chat_input("输入对话内容..."):
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    save_chat(st.session_state.session_id, "user", prompt)
+# 内存 Session 存储池
+sessions = {}
 
-    with st.chat_message("assistant"):
-        with st.status("处理中...", expanded=True) as status:
-            # 1. Intent Routing (意图识别)
-            target_department = get_router_intent(prompt, ALIYUN_API_KEY)
 
-            # 2. 组装对应 Agent 的上下文策略
-            if target_department == "Checkout":
-                status.update(label="路由到: Checkout Agent", state="running")
-                agent_prompt = "你是收银员。立刻调用 create_order 工具，不要返回其他闲聊文本。"
-                active_tools = TOOLS
-            elif target_department == "Inventory":
-                status.update(label="路由到: Inventory Agent", state="running")
-                agent_prompt = f"你是仓管员。根据以下结构化数据回答库存/价格问题：\n{db_data}"
-                active_tools = None
+@app.route('/')
+def index():
+    """渲染前端页面"""
+    return render_template('index.html')
+
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    """核心聊天 API 接口"""
+    data = request.get_json()
+    user_message = data.get('message', '')  # 默认给空字符串防止报错
+    session_id = data.get('session_id')
+    base64_image = data.get('image')  # 🌟 获取前端传来的图片
+
+    # 校验：没说话也没发图直接拦截
+    if not user_message and not base64_image:
+        return jsonify({"reply": "消息和图片不能同时为空"}), 400
+
+    # 动态读取或生成 session_id
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    if session_id not in sessions:
+        sessions[session_id] = []
+
+    # 整理日志：记录用户的聊天或发图行为
+    log_msg = user_message if user_message else "[发送了一张图片]"
+    if base64_image and user_message:
+        log_msg += " [附带图片]"
+
+    sessions[session_id].append({"role": "user", "content": log_msg})
+    save_chat(session_id, "user", log_msg)
+
+    try:
+        # 核心判断：是走纯文本还是走视觉大模型？
+        if base64_image:
+            # 进入视觉分支
+            vision_res = call_vision_agent(base64_image, db_data, ALIYUN_API_KEY)
+            reply = f"👁️ **图片解析结果**<br><br>{vision_res}"
+
+        else:
+            # 进入原本的纯文本业务分支
+            dept = get_router_intent(user_message, ALIYUN_API_KEY)
+
+            if dept == "Checkout":
+                sys_prompt = "你是结算员。请调用 create_order 工具生成订单信息。"
+                tools = TOOLS
+            elif dept == "Inventory":
+                sys_prompt = f"你是库管。基于以下数据客观回答库存与价格问题：\n{db_data}"
+                tools = None
             else:
-                status.update(label="路由到: Sales Agent", state="running")
-                agent_prompt = f"""
-                你是一个顶级电商导购专家，请遵循以下规则：
+                sys_prompt = f"你是金牌导购。根据商品库提供专业的搭配建议：\n{db_data}"
+                tools = None
 
-                1. 必须基于商品库推荐具体商品
-                2. 优先推荐性价比高的产品
-                3. 回答要像真人销售（自然、有引导）
-                4. 如果用户犹豫，要主动推荐2-3个选择
-                5. 不允许编造商品（必须来自商品库）
+            msgs = [{"role": "system", "content": sys_prompt}] + sessions[session_id][-4:]
+            ai_res = call_department_agent(msgs, ALIYUN_API_KEY, tools)
 
-                【商品库】
-                {db_data}
-                """
-                active_tools = None
-
-            # 3. 构造请求 Payload (仅携带最近 4 条历史防止 Token 超出)
-            agent_messages = [{"role": "system", "content": agent_prompt}]
-            for msg in st.session_state.messages[-4:]:
-                agent_messages.append(msg)
-
-            # 4. 执行 Agent 调用
-            ai_msg_obj = call_department_agent(agent_messages, ALIYUN_API_KEY, active_tools)
-            status.update(label="请求完成", state="complete")
-
-            # 5. 处理响应机制 (Function Calling vs 文本输出)
-            if ai_msg_obj.get("tool_calls"):  # <--- 换成最安全的 .get() 方法
-                tool_call = ai_msg_obj.get("tool_calls")[0]
-                if tool_call["function"]["name"] == "create_order":
-                    arguments = json.loads(tool_call["function"]["arguments"])
-                    render_checkout_card(arguments["product_name"], arguments["price"])
-                    ai_reply = f"已为您生成【{arguments['product_name']}】的结算单，请核对。"
-                    st.markdown(ai_reply)
+            tool_calls = ai_res.get("tool_calls")
+            if tool_calls:
+                params = json.loads(tool_calls[0]["function"]["arguments"])
+                product_name = params.get('product_name')
+                price = params.get('price')
+                reply = f"💳 **收银台已为您生成订单**<br><br>商品：{product_name}<br>金额：¥{price}<br><br><i>请确认无误后完成支付。</i>"
             else:
-                ai_reply = ai_msg_obj.get("content", "")  # <--- 这里也换成安全的 .get()
-                st.markdown(ai_reply)
+                reply = ai_res.get("content", "抱歉，暂时无法处理该请求。")
 
-        # 落盘与状态更新
-        st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-        save_chat(st.session_state.session_id, "assistant", ai_reply)
+        # 无论哪个分支，统一保存记忆并返回
+        sessions[session_id].append({"role": "assistant", "content": reply})
+        save_chat(session_id, "assistant", reply)
+
+        # 把大模型返回文本里的换行符(\n)替换为HTML换行符(<br>)，让排版更美观
+        return jsonify({"reply": reply.replace('\n', '<br>')})
+
+    except Exception as e:
+        return jsonify({"reply": f"系统繁忙，请稍后再试: {str(e)}"}), 500
+
+
+if __name__ == '__main__':
+    app.run(host='127.0.0.1', port=5000, debug=True)

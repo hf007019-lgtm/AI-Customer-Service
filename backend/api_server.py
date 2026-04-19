@@ -9,7 +9,7 @@ load_dotenv()
 API_KEY = os.getenv("ALIYUN_API_KEY")
 
 app = Flask(__name__)
-CORS(app)   # ✅ 只写一次！
+CORS(app)
 
 @app.route("/")
 def home():
